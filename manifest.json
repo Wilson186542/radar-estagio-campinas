@@ -1,0 +1,25 @@
+{
+  "name": "Radar do Estágio • Campinas (330 / 386 / 382)",
+  "short_name": "Radar Estágio",
+  "description": "Monitoramento em tempo real do trajeto Barão Geraldo (Unicamp) ↔ Centro ↔ Cristália (Cambuí) para as linhas 330, 386 e 382.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='38' fill='%230f172a'/%3E%3Crect x='36' y='34' width='120' height='98' rx='18' fill='none' stroke='%2338bdf8' stroke-width='12'/%3E%3Cline x1='36' y1='82' x2='156' y2='82' stroke='%2338bdf8' stroke-width='10'/%3E%3Ccircle cx='64' cy='108' r='8' fill='%2310b981'/%3E%3Ccircle cx='128' cy='108' r='8' fill='%2310b981'/%3E%3Cpath d='M58 158l14-26M134 158l-14-26' stroke='%2338bdf8' stroke-width='12' stroke-linecap='round'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230f172a'/%3E%3Crect x='96' y='90' width='320' height='260' rx='48' fill='none' stroke='%2338bdf8' stroke-width='28'/%3E%3Cline x1='96' y1='218' x2='416' y2='218' stroke='%2338bdf8' stroke-width='24'/%3E%3Ccircle cx='170' cy='288' r='22' fill='%2310b981'/%3E%3Ccircle cx='342' cy='288' r='22' fill='%2310b981'/%3E%3Cpath d='M154 420l36-70M358 420l-36-70' stroke='%2338bdf8' stroke-width='28' stroke-linecap='round'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
