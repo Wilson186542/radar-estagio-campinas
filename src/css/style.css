@@ -429,6 +429,206 @@ aside.sidebar {
   font-weight: 600;
 }
 
+.eta-row-card.is-boarded {
+  background: #eff6ff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
+}
+
+.eta-right-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.btn-board-bus {
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.btn-board-bus:hover {
+  background: #1e293b;
+}
+
+.btn-board-bus.boarded-active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+/* Active Ride Banner (Modo Embarcado) */
+.active-ride-banner {
+  background: linear-gradient(135deg, #064e3b 0%, #0f172a 100%);
+  color: #ffffff;
+  padding: 11px 13px;
+  border-bottom: 2px solid #10b981;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(6, 78, 59, 0.25);
+}
+
+.ride-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ride-badge-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #a7f3d0;
+  letter-spacing: 0.01em;
+}
+
+.btn-leave-bus {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-leave-bus:hover {
+  background: rgba(239, 68, 68, 0.85);
+  border-color: #ef4444;
+}
+
+.ride-next-box {
+  background: rgba(255, 255, 255, 0.09);
+  border-left: 3px solid #34d399;
+  padding: 6px 9px;
+  border-radius: 5px;
+}
+
+.ride-next-label {
+  font-size: 0.61rem;
+  font-weight: 800;
+  color: #6ee7b7;
+  letter-spacing: 0.04em;
+}
+
+.ride-next-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 0.78rem;
+}
+
+.ride-next-row strong {
+  color: #ffffff;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ride-next-eta {
+  background: #10b981;
+  color: #064e3b;
+  font-weight: 800;
+  font-size: 0.71rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.ride-dest-box {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ride-dest-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+.ride-dest-select {
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.71rem;
+  font-weight: 600;
+  max-width: 215px;
+}
+
+.ride-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ride-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #34d399, #38bdf8);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.ride-dest-eta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ride-stops-left {
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.ride-dest-big-eta {
+  font-size: 0.78rem;
+  color: #e2e8f0;
+}
+
+.ride-dest-big-eta strong {
+  font-size: 0.92rem;
+  color: #34d399;
+  font-weight: 800;
+}
+
+.explore-active-buses {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+
 .step-footer-Dropoff {
   display: flex;
   align-items: center;
