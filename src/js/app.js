@@ -446,10 +446,16 @@ let lastRealtimeSyncMs = 0;
 let deferredPwaPrompt = null;
 let boardedRide = null; // { routeId, direction, vehicleId, destStopId, boardedAtMs }
 
+// Controle de Economia de Limites e Pausa Inteligente
+let userForcedTracking = null; // null = segue agenda automática; true = forçado ligado; false = forçado pausado
+let pollingTimer = null;
+const POLLING_INTERVAL_MS = 12000;
+
 const busMarkersByKey = new Map();
 
 // Elementos DOM
 const liveStatusText = document.getElementById("live-status-text");
+const livePulseDot = document.getElementById("live-pulse-dot");
 const liveClockEl = document.getElementById("live-clock");
 const lastSyncTimeEl = document.getElementById("last-sync-time");
 
@@ -460,6 +466,99 @@ const tabExplore = document.getElementById("tab-explore");
 const commutePanel = document.getElementById("commute-panel");
 const explorePanel = document.getElementById("explore-panel");
 const activeRideBanner = document.getElementById("active-ride-banner");
+
+/**
+ * Verifica se o horário atual está dentro da janela de estágio:
+ * Segunda a Sexta: 06:25 às 08:15 (manhã) OU 15:00 às 16:30 (tarde)
+ */
+function isAutoCommuteWindow(date = new Date()) {
+  const day = date.getDay();
+  // 0 = Domingo, 6 = Sábado
+  if (day === 0 || day === 6) return false;
+
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  // Manhã: 06:25 (385) às 08:15 (495)
+  const isMorning = minutes >= 385 && minutes <= 495;
+  // Tarde: 15:00 (900) às 16:30 (990)
+  const isAfternoon = minutes >= 900 && minutes <= 990;
+
+  return isMorning || isAfternoon;
+}
+
+function isTrackingActive() {
+  if (boardedRide) return true; // Se o usuário está dentro de um ônibus, mantém o rastreamento ativo
+  if (userForcedTracking !== null) return userForcedTracking;
+  return isAutoCommuteWindow();
+}
+
+function updateEcoBarAndStatus() {
+  const ecoBar = document.getElementById("eco-bar");
+  const ecoIcon = document.getElementById("eco-icon");
+  const ecoTitle = document.getElementById("eco-title");
+  const ecoSubtitle = document.getElementById("eco-subtitle");
+  const btnToggle = document.getElementById("btn-toggle-tracking");
+
+  const active = isTrackingActive();
+  const inWindow = isAutoCommuteWindow();
+
+  if (active) {
+    ecoBar?.classList.add("is-live-mode");
+    if (boardedRide) {
+      if (ecoIcon) ecoIcon.textContent = "🚍";
+      if (ecoTitle) ecoTitle.textContent = `Embarcado no #${boardedRide.vehicleId}`;
+      if (ecoSubtitle) ecoSubtitle.textContent = "Acompanhando trajeto ao vivo";
+    } else if (inWindow && userForcedTracking === null) {
+      if (ecoIcon) ecoIcon.textContent = "🟢";
+      if (ecoTitle) ecoTitle.textContent = "GPS Ao Vivo • Horário de Pico";
+      if (ecoSubtitle) ecoSubtitle.textContent = "Seg–Sex 6h25–8h15 e 15h–16h30 (a cada 12s)";
+    } else {
+      if (ecoIcon) ecoIcon.textContent = "⚡";
+      if (ecoTitle) ecoTitle.textContent = "GPS Ligado Manualmente";
+      if (ecoSubtitle) ecoSubtitle.textContent = "Rastreamento ativado por você";
+    }
+
+    if (btnToggle) {
+      btnToggle.textContent = "⏸️ Pausar GPS";
+      btnToggle.classList.add("active");
+    }
+    if (liveStatusText) liveStatusText.textContent = "Ao Vivo";
+    if (livePulseDot) livePulseDot.style.display = "inline-block";
+  } else {
+    ecoBar?.classList.remove("is-live-mode");
+    if (ecoIcon) ecoIcon.textContent = "⏸️";
+    if (ecoTitle) ecoTitle.textContent = "GPS em Pausa (Economia)";
+    if (ecoSubtitle) ecoSubtitle.textContent = "Fora do horário para poupar limites e bateria";
+    if (btnToggle) {
+      btnToggle.textContent = "▶️ Ligar GPS";
+      btnToggle.classList.remove("active");
+    }
+    if (liveStatusText) liveStatusText.textContent = "Pausado";
+    if (livePulseDot) livePulseDot.style.display = "none";
+  }
+}
+
+function syncPollingState() {
+  updateEcoBarAndStatus();
+  if (isTrackingActive()) {
+    if (!pollingTimer) {
+      pollingTimer = setInterval(fetchRealtimeData, POLLING_INTERVAL_MS);
+    }
+  } else {
+    if (pollingTimer) {
+      clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+  }
+}
+
+function toggleTracking() {
+  const current = isTrackingActive();
+  userForcedTracking = !current;
+  syncPollingState();
+  if (userForcedTracking) {
+    fetchRealtimeData();
+  }
+}
 
 function loadBoardedRideFromStorage() {
   try {
@@ -764,19 +863,28 @@ async function initApp() {
     syncActiveModeTabs();
     renderActiveView(true);
 
+    // Atualização inicial única
     await fetchRealtimeData();
-    setInterval(fetchRealtimeData, 10000);
+
+    // Sincroniza estado de economia e inicia polling periódico se ativo
+    syncPollingState();
+
+    // Verifica a cada 20 segundos se entrou ou saiu do horário de pico (Seg-Sex 6h25-8h15 e 15h-16h30)
+    setInterval(() => {
+      syncPollingState();
+    }, 20000);
+
     setInterval(tickSmoothVehicles, 1000);
   } catch (err) {
     console.error("Erro ao carregar dados:", err);
-    liveStatusText.textContent = "Erro de conexão";
+    if (liveStatusText) liveStatusText.textContent = "Erro";
   }
 }
 
 async function fetchRealtimeData() {
   if (!transitData || !transitData.routes) return;
   try {
-    liveStatusText.textContent = "Sincronizando GPS...";
+    if (liveStatusText) liveStatusText.textContent = "Sincronizando...";
 
     const pairKeySet = new Set();
     const pairsToFetch = [];
@@ -812,8 +920,7 @@ async function fetchRealtimeData() {
     });
 
     lastRealtimeSyncMs = Date.now();
-    lastSyncTimeEl.textContent = `GPS: ${new Date().toLocaleTimeString("pt-BR")}`;
-    liveStatusText.textContent = "GPS Ao Vivo • EMDEC";
+    updateEcoBarAndStatus();
     updateActiveRideBanner();
     updateRealtimeCardsAndMarkers();
   } catch (e) {
@@ -824,12 +931,12 @@ async function fetchRealtimeData() {
       if (data.status === "ok" && data.directions) {
         realtimeDirections = data.directions;
         lastRealtimeSyncMs = Date.now();
-        liveStatusText.textContent = "GPS Ao Vivo • Local";
+        updateEcoBarAndStatus();
         updateActiveRideBanner();
         updateRealtimeCardsAndMarkers();
       }
     } catch {
-      liveStatusText.textContent = "GPS Offline";
+      if (liveStatusText) liveStatusText.textContent = "Offline";
     }
   }
 }
@@ -862,32 +969,34 @@ function renderActiveView(shouldFitBounds = false) {
 }
 
 function renderCommutePreset(preset, shouldFitBounds) {
-  document.getElementById("commute-window-tag").textContent = preset.windowTag;
-  document.getElementById("commute-title").textContent = preset.title;
-  document.getElementById("commute-desc").textContent = preset.description;
-
   const s1 = preset.step1;
   const s1Chip = document.getElementById("step1-line-chip");
-  s1Chip.textContent = s1.lineLabel;
-  s1Chip.style.backgroundColor = s1.color;
-  document.getElementById("step1-board-box").style.borderLeftColor = s1.color;
-  document.getElementById("step1-board-title").textContent = s1.boardTitle;
-  document.getElementById("step1-habitual").innerHTML = s1.habitualHtml;
-  document.getElementById("step1-alight-title").textContent = s1.alightTitle;
-  document.getElementById("step1-alight-meta").textContent = s1.alightMeta;
+  if (s1Chip) {
+    s1Chip.textContent = s1.routeId;
+    s1Chip.style.backgroundColor = s1.color;
+  }
+  const s1Board = document.getElementById("step1-board-title");
+  if (s1Board) s1Board.textContent = s1.boardTitle.replace(/\s*\(.*?\)\s*/g, "");
+  const s1Habitual = document.getElementById("step1-habitual");
+  if (s1Habitual) s1Habitual.innerHTML = s1.habitualHtml;
+  const s1Alight = document.getElementById("step1-alight-title");
+  if (s1Alight) s1Alight.textContent = s1.alightTitle;
 
-  document.getElementById("transfer-title").textContent = preset.transfer.title;
-  document.getElementById("transfer-subtitle").textContent = preset.transfer.subtitle;
+  const tTitle = document.getElementById("transfer-title");
+  if (tTitle) tTitle.textContent = preset.transfer.title;
 
   const s2 = preset.step2;
   const s2Chip = document.getElementById("step2-line-chip");
-  s2Chip.textContent = s2.lineLabel;
-  s2Chip.style.backgroundColor = s2.color;
-  document.getElementById("step2-board-box").style.borderLeftColor = s2.color;
-  document.getElementById("step2-board-title").textContent = s2.boardTitle;
-  document.getElementById("step2-habitual").innerHTML = s2.habitualHtml;
-  document.getElementById("step2-alight-title").textContent = s2.alightTitle;
-  document.getElementById("step2-alight-meta").textContent = s2.alightMeta;
+  if (s2Chip) {
+    s2Chip.textContent = s2.routeId;
+    s2Chip.style.backgroundColor = s2.color;
+  }
+  const s2Board = document.getElementById("step2-board-title");
+  if (s2Board) s2Board.textContent = s2.boardTitle.replace(/\s*\(.*?\)\s*/g, "");
+  const s2Habitual = document.getElementById("step2-habitual");
+  if (s2Habitual) s2Habitual.innerHTML = s2.habitualHtml;
+  const s2Alight = document.getElementById("step2-alight-title");
+  if (s2Alight) s2Alight.textContent = s2.alightTitle;
 
   const boundsGroup = L.featureGroup();
   const leg1Coords = drawCommuteLegOnMap(s1, "1", "2", boundsGroup);
@@ -896,30 +1005,15 @@ function renderCommutePreset(preset, shouldFitBounds) {
   if (leg1Coords.alightLatLng && leg2Coords.boardLatLng) {
     const walkLine = L.polyline([leg1Coords.alightLatLng, leg2Coords.boardLatLng], {
       color: "#f59e0b",
-      weight: 4,
-      dashArray: "4, 8",
+      weight: 3.5,
+      dashArray: "4, 6",
       opacity: 0.95,
     }).addTo(routeLayerGroup);
-    walkLine.bindPopup(`<strong>${preset.transfer.title}</strong><br>${preset.transfer.subtitle}`);
+    walkLine.bindPopup(`<strong>${preset.transfer.title}</strong>`);
   }
 
-  document.getElementById("btn-focus-step1").onclick = () => {
-    if (leg1Coords.boardLatLng) map.flyTo(leg1Coords.boardLatLng, 16, { duration: 0.7 });
-  };
-  document.getElementById("btn-focus-transfer").onclick = () => {
-    if (leg1Coords.alightLatLng && leg2Coords.boardLatLng) {
-      map.fitBounds(L.latLngBounds([leg1Coords.alightLatLng, leg2Coords.boardLatLng]), {
-        padding: [70, 70],
-        maxZoom: 17,
-      });
-    }
-  };
-  document.getElementById("btn-focus-step2").onclick = () => {
-    if (leg2Coords.alightLatLng) map.flyTo(leg2Coords.alightLatLng, 16, { duration: 0.7 });
-  };
-
   if (shouldFitBounds && boundsGroup.getLayers().length > 0) {
-    map.fitBounds(boundsGroup.getBounds(), { padding: [40, 40] });
+    map.fitBounds(boundsGroup.getBounds(), { padding: [35, 35] });
   }
 }
 
@@ -1444,6 +1538,10 @@ function setupEventListeners() {
       renderActiveView(true);
       fetchRealtimeData();
     });
+  });
+
+  document.getElementById("btn-toggle-tracking")?.addEventListener("click", () => {
+    toggleTracking();
   });
 
   document.getElementById("btn-leave-bus")?.addEventListener("click", () => {
