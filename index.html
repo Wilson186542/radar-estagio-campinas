@@ -20,15 +20,15 @@
   />
 
   <!-- App Custom CSS -->
-  <link rel="stylesheet" href="src/css/style.css?v=5">
+  <link rel="stylesheet" href="src/css/style.css?v=6">
 </head>
 <body>
 
-  <!-- Top Header -->
+  <!-- Top Header Enxuto -->
   <header class="topbar">
     <div class="header-brand">
       <div class="brand-logo" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="15" rx="3"></rect>
           <path d="M3 10h18"></path>
           <path d="M7 21l2-3"></path>
@@ -39,28 +39,19 @@
       </div>
       <div class="brand-titles">
         <h1>Radar do Estágio</h1>
-        <p class="header-subtitle">330 + 386 (Ida) &bull; 382 + 330 (Volta)</p>
       </div>
       <span class="badge-live" id="live-status-badge">
-        <span class="pulse-dot"></span>
-        <span id="live-status-text">Conectando...</span>
+        <span class="pulse-dot" id="live-pulse-dot"></span>
+        <span id="live-status-text">Iniciando...</span>
       </span>
     </div>
 
     <div class="header-actions">
       <span class="clock-pill" id="live-clock">--:--</span>
-      <button type="button" id="btn-install-pwa" class="btn-install" style="display:none;">
-        Instalar App
-      </button>
-      <button type="button" id="btn-my-gps" class="btn-secondary" title="Mostrar minha localização atual no mapa">
-        📍 Meu GPS
-      </button>
-      <button type="button" id="btn-fit-commute" class="btn-secondary" title="Enquadrar trajeto no mapa">
-        Enquadrar
-      </button>
-      <button type="button" id="btn-refresh-rt" class="btn-refresh" title="Atualizar posição dos ônibus agora">
-        Atualizar
-      </button>
+      <button type="button" id="btn-install-pwa" class="btn-install" style="display:none;">Instalar</button>
+      <button type="button" id="btn-my-gps" class="btn-header" title="Minha localização GPS">📍 GPS</button>
+      <button type="button" id="btn-fit-commute" class="btn-header" title="Enquadrar trajeto">🎯 Trajeto</button>
+      <button type="button" id="btn-refresh-rt" class="btn-header btn-primary-header" title="Atualizar agora">↻</button>
     </div>
   </header>
 
@@ -68,159 +59,136 @@
   <div class="app-layout" id="app-layout">
     <!-- Painel de Controle / Horários -->
     <aside class="sidebar" id="sidebar-panel">
-      <!-- Seletor de Modo: IDA ESTÁGIO vs VOLTA CASA vs LINHAS -->
+      
+      <!-- Barra de Controle de Economia de Limites / GPS Ao Vivo -->
+      <div class="eco-bar" id="eco-bar">
+        <div class="eco-status-wrap">
+          <span class="eco-icon" id="eco-icon">⏸️</span>
+          <div class="eco-text-col">
+            <strong id="eco-title">GPS em Pausa</strong>
+            <span id="eco-subtitle">Economizando dados fora do pico</span>
+          </div>
+        </div>
+        <button type="button" id="btn-toggle-tracking" class="btn-eco-toggle">▶️ Ligar GPS</button>
+      </div>
+
+      <!-- Abas de Modo Compactas -->
       <div class="mode-selector-section">
         <div class="mode-tabs" role="tablist">
           <button type="button" class="mode-tab active" id="tab-morning" data-mode="MORNING">
-            <span class="mode-tab-title">Ida Estágio</span>
-            <span class="mode-tab-sub">06:40–07:55 • 330→386</span>
+            <span class="mode-tab-title">☀️ Ida (330 → 386)</span>
+            <span class="mode-tab-sub">Pastelaria → Cristália</span>
           </button>
           <button type="button" class="mode-tab" id="tab-afternoon" data-mode="AFTERNOON">
-            <span class="mode-tab-title">Volta Casa</span>
-            <span class="mode-tab-sub">15:00–16:00 • 382→330</span>
+            <span class="mode-tab-title">🌇 Volta (382 → 330)</span>
+            <span class="mode-tab-sub">Cristália → Oxxo Unicamp</span>
           </button>
           <button type="button" class="mode-tab mode-tab-small" id="tab-explore" data-mode="EXPLORE">
-            <span class="mode-tab-title">Qualquer</span>
-            <span class="mode-tab-sub">Linha</span>
+            <span class="mode-tab-title">🔍 Linhas</span>
+            <span class="mode-tab-sub">330/386/382</span>
           </button>
         </div>
       </div>
 
       <!-- ================================================================ -->
-      <!-- CARD GLOBAL: MODO EMBARCADO ("ESTOU NESTE ÔNIBUS")               -->
-      <!-- Aparece no topo assim que você confirma que entrou em um ônibus  -->
+      <!-- CARD: MODO EMBARCADO ("ESTOU NESTE ÔNIBUS")                      -->
+      <!-- Aparece quando você confirma o embarque                          -->
       <!-- ================================================================ -->
       <div id="active-ride-banner" class="active-ride-banner" style="display:none;">
         <div class="ride-banner-header">
           <div class="ride-badge-group">
             <span class="ride-live-dot"></span>
-            <span class="ride-title-tag" id="ride-title-tag">VOCÊ ESTÁ NO 330 • #3275</span>
+            <strong class="ride-title-tag" id="ride-title-tag">Embarcado</strong>
           </div>
-          <button type="button" id="btn-leave-bus" class="btn-leave-bus">🚶 Já desci</button>
+          <button type="button" id="btn-leave-bus" class="btn-leave-bus">🚶 Desci</button>
         </div>
 
-        <!-- Próximo ponto imediato na rua -->
-        <div class="ride-next-stop-box">
-          <div class="ride-small-label">PRÓXIMO PONTO NA RUA:</div>
-          <div class="ride-next-stop-row">
-            <strong id="ride-next-stop-name">--</strong>
-            <span class="ride-next-eta" id="ride-next-stop-eta">--</span>
-          </div>
+        <div class="ride-next-row">
+          <span class="ride-label-dim">Próxima parada:</span>
+          <strong id="ride-next-stop-name">--</strong>
+          <span class="ride-next-eta" id="ride-next-stop-eta">--</span>
         </div>
 
-        <!-- Barra de progresso e estimativa real até seu ponto de descida -->
-        <div class="ride-dest-box">
-          <div class="ride-dest-header">
-            <span class="ride-small-label">SEU PONTO DE DESCIDA:</span>
+        <div class="ride-dest-row">
+          <div class="ride-dest-top">
+            <span class="ride-label-dim">Descida:</span>
             <select id="ride-dest-select" class="ride-dest-select" aria-label="Alterar parada de descida"></select>
           </div>
           <div class="ride-progress-bar-wrap">
             <div class="ride-progress-bar-fill" id="ride-progress-fill" style="width:0%"></div>
           </div>
-          <div class="ride-dest-metrics">
-            <div>
-              <span class="ride-stops-left" id="ride-stops-left">Faltam -- paradas</span>
-              <span class="ride-status-sub" id="ride-status-sub">Calculado pelo GPS em tempo real</span>
-            </div>
-            <div class="ride-dest-eta-right">
-              <span class="ride-dest-clock" id="ride-dest-clock">--:--</span>
-              <span class="ride-dest-countdown" id="ride-dest-countdown">-- min</span>
-            </div>
+          <div class="ride-dest-footer">
+            <span id="ride-stops-left">Faltam -- paradas</span>
+            <span class="ride-dest-eta-badge">
+              Chega às <strong id="ride-dest-clock">--:--</strong> <span id="ride-dest-countdown">(--)</span>
+            </span>
           </div>
         </div>
       </div>
 
-      <!-- VISÃO PRINCIPAL: MEU TRAJETO DO ESTÁGIO (MANHÃ OU TARDE) -->
+      <!-- VISÃO PRINCIPAL: TRAJETO DIRETO (SEM TEXTOS LONGOS) -->
       <div id="commute-panel" class="commute-panel">
-        <!-- Resumo do Turno Selecionado -->
-        <div class="commute-banner" id="commute-banner">
-          <div class="commute-banner-top">
-            <span class="commute-window-tag" id="commute-window-tag">MANHÃ • 06:40 ÀS 07:55</span>
-            <span class="sync-time-small" id="last-sync-time">--:--:--</span>
-          </div>
-          <h2 id="commute-title">Pastelaria Tropical → Centro → Cristália</h2>
-          <p id="commute-desc">Toque em <strong>"Entrei neste"</strong> quando subir no ônibus para acompanhar cada parada e o horário exato de descida.</p>
-        </div>
 
         <!-- PASSO 1: PRIMEIRO ÔNIBUS -->
         <div class="step-card" id="step1-card">
-          <div class="step-header">
-            <span class="step-number">PASSO 1 • 1º ÔNIBUS</span>
-            <span class="line-chip" id="step1-line-chip" style="background:#0284c7">Linha 330</span>
+          <div class="step-card-header">
+            <span class="line-badge" id="step1-line-chip" style="background:#0284c7">330</span>
+            <div class="step-stop-titles">
+              <strong class="step-stop-name" id="step1-board-title">Pastelaria Tropical</strong>
+              <span class="step-habitual-sub" id="step1-habitual">Costuma passar: 06:46 / 06:56</span>
+            </div>
           </div>
 
-          <div class="stop-focus-box" id="step1-board-box">
-            <div class="stop-role">SEU PONTO DE EMBARQUE</div>
-            <div class="stop-main-title" id="step1-board-title">Av. Dr. Romeu Tórtima, 1575 (Pastelaria Tropical)</div>
-            <div class="stop-habitual" id="step1-habitual">Passou: <strong>06:46 (#3275)</strong> e <strong>06:56–06:57</strong></div>
-          </div>
-
-          <!-- Previsão Ao Vivo no Ponto 1 + Botão "Entrei neste" -->
+          <!-- Previsão Ao Vivo no Ponto 1 -->
           <div class="live-eta-box" id="step1-live-etas"></div>
 
-          <div class="step-footer-Dropoff">
-            <div class="dropoff-info">
-              <span class="dropoff-label">DESCIDA NO CENTRO:</span>
-              <strong id="step1-alight-title">Av. Senador Saraiva, 767 (Centro)</strong>
-              <span class="dropoff-meta" id="step1-alight-meta">~26–28 min reais no pico (ex: 06:46 → 07:14)</span>
-            </div>
-            <button type="button" class="btn-focus-map" id="btn-focus-step1">Focar Ponto</button>
+          <div class="step-card-footer">
+            <span>Descida: <strong id="step1-alight-title">Av. Senador Saraiva, 767</strong></span>
           </div>
         </div>
 
-        <!-- CONECTOR DE BALDEAÇÃO NO CENTRO -->
-        <div class="transfer-connector" id="transfer-box">
+        <!-- CONECTOR DE BALDEAÇÃO -->
+        <div class="transfer-strip" id="transfer-box">
           <div class="transfer-icon">🚶</div>
-          <div class="transfer-text">
-            <strong id="transfer-title">Baldeação na Av. Senador Saraiva (~180m a pé)</strong>
-            <span id="transfer-subtitle">Andar para a frente e mudar de lado da ilha para pegar o 386</span>
-            <div class="transfer-radar" id="transfer-radar-status">Calculando sincronia entre os ônibus...</div>
+          <div class="transfer-info">
+            <strong id="transfer-title">Baldeação na Saraiva (~2 min a pé)</strong>
+            <span id="transfer-radar-status">Conexão em tempo real...</span>
           </div>
-          <button type="button" class="btn-focus-map" id="btn-focus-transfer">Zoom Centro</button>
         </div>
 
-        <!-- PASSO 2: SEGUNDO ÔNIBUS (CONEXÃO) -->
+        <!-- PASSO 2: SEGUNDO ÔNIBUS -->
         <div class="step-card" id="step2-card">
-          <div class="step-header">
-            <span class="step-number">PASSO 2 • 2º ÔNIBUS (CONEXÃO)</span>
-            <span class="line-chip" id="step2-line-chip" style="background:#059669">Linha 386</span>
+          <div class="step-card-header">
+            <span class="line-badge" id="step2-line-chip" style="background:#059669">386</span>
+            <div class="step-stop-titles">
+              <strong class="step-stop-name" id="step2-board-title">Ilha Senador Saraiva</strong>
+              <span class="step-habitual-sub" id="step2-habitual">Costuma passar: 07:20 / 07:31</span>
+            </div>
           </div>
 
-          <div class="stop-focus-box" id="step2-board-box">
-            <div class="stop-role">PONTO DA BALDEAÇÃO</div>
-            <div class="stop-main-title" id="step2-board-title">Av. Senador Saraiva, 528 (Ilha Central)</div>
-            <div class="stop-habitual" id="step2-habitual">Passou: <strong>07:20 (#287)</strong>, <strong>07:31–07:32</strong>, <strong>07:45</strong></div>
-          </div>
-
-          <!-- Previsão Ao Vivo no Ponto 2 + Botão "Entrei neste" -->
+          <!-- Previsão Ao Vivo no Ponto 2 -->
           <div class="live-eta-box" id="step2-live-etas"></div>
 
-          <div class="step-footer-Dropoff">
-            <div class="dropoff-info">
-              <span class="dropoff-label">DESTINO FINAL:</span>
-              <strong id="step2-alight-title">Av. José de Souza Campos, 1358 (Cristália)</strong>
-              <span class="dropoff-meta" id="step2-alight-meta">~14 min de viagem até o Cristália</span>
-            </div>
-            <button type="button" class="btn-focus-map" id="btn-focus-step2">Focar Destino</button>
+          <div class="step-card-footer">
+            <span>Destino: <strong id="step2-alight-title">Cristália (Cambuí)</strong></span>
           </div>
         </div>
       </div>
 
-      <!-- VISÃO SECUNDÁRIA: QUALQUER LINHA (330, 386, 382) -->
+      <!-- VISÃO SECUNDÁRIA: QUALQUER LINHA -->
       <div id="explore-panel" class="explore-panel" style="display:none;">
         <div class="explore-controls">
           <div class="line-pills">
-            <button type="button" class="line-pill active" data-route="330">330 Unicamp</button>
-            <button type="button" class="line-pill" data-route="386">386 Cambuí</button>
-            <button type="button" class="line-pill" data-route="382">382 Shopping</button>
+            <button type="button" class="line-pill active" data-route="330">330</button>
+            <button type="button" class="line-pill" data-route="386">386</button>
+            <button type="button" class="line-pill" data-route="382">382</button>
           </div>
           <div class="direction-switcher">
             <button type="button" class="dir-btn active" id="btn-dir-ida" data-dir="IDA">IDA</button>
             <button type="button" class="dir-btn" id="btn-dir-volta" data-dir="VOLTA">VOLTA</button>
           </div>
-          <!-- Lista de carros ativos nessa linha para embarcar com 1 toque -->
           <div id="explore-active-buses" class="explore-active-buses"></div>
-          <input type="search" id="stop-search" class="stop-search-input" placeholder="Buscar rua ou parada na linha..." />
+          <input type="search" id="stop-search" class="stop-search-input" placeholder="Buscar parada na linha..." />
         </div>
         <ul class="stops-timeline" id="stops-timeline"></ul>
       </div>
@@ -228,32 +196,12 @@
 
     <!-- Map Area -->
     <main class="map-wrapper">
-      <div id="map" role="region" aria-label="Mapa do trajeto para o estágio em Campinas"></div>
+      <div id="map" role="region" aria-label="Mapa do trajeto em Campinas"></div>
 
-      <!-- Botão Mobile para alternar tamanho do mapa no celular -->
+      <!-- Botão Mobile para alternar mapa/lista no celular -->
       <button type="button" id="btn-toggle-mobile-map" class="mobile-map-toggle">
-        ↕ Expandir / Reduzir Mapa
+        ↕ Alternar Mapa / Lista
       </button>
-
-      <!-- Legenda Enxuta no Mapa -->
-      <div class="map-legend">
-        <div class="legend-item">
-          <span class="legend-dot live-gps"></span>
-          <span>Ônibus GPS Ao Vivo</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot scheduled-bus"></span>
-          <span>Estimado / Terminal</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-line-sample" style="background:#0284c7"></span>
-          <span>330</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-line-sample" style="background:#059669"></span>
-          <span>386 / 382</span>
-        </div>
-      </div>
     </main>
   </div>
 
@@ -265,6 +213,6 @@
   ></script>
 
   <!-- Main App JS -->
-  <script src="src/js/app.js?v=5"></script>
+  <script src="src/js/app.js?v=6"></script>
 </body>
 </html>
