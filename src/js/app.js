@@ -24,10 +24,10 @@ const PRIORITY_STOP_IDS = new Set([
 const COMMUTE_PRESETS = {
   MORNING: {
     id: "MORNING",
-    windowTag: "MANHÃ • FAIXA DAS 06:50 ÀS 07:55",
+    windowTag: "MANHÃ • FAIXA DAS 06:40 ÀS 07:55",
     title: "Ida ao Estágio: Pastelaria Tropical → Cristália",
     description:
-      "Pega o 330 na Romeu Tórtima (6:56–6:57), desce na Senador Saraiva (7:28–7:32), muda de lado na ilha e pega o 386 (7:31–7:45) até o Cristália (~7:50).",
+      "Pega o 330 na Romeu Tórtima (6:46 ou 6:56–6:57), desce na Senador Saraiva (7:14–7:32), muda de lado na ilha e pega o 386 (7:20–7:45) até o Cristália (~7:35–7:50).",
     step1: {
       routeId: "330",
       direction: "VOLTA",
@@ -37,12 +37,13 @@ const COMMUTE_PRESETS = {
       boardTitle: "Av. Dr. Romeu Tórtima, 1575 (Pastelaria Tropical)",
       boardPinLabel: "1. Pegar 330 • Pastelaria Tropical",
       habitualHtml:
-        "Costuma passar: <strong>06:56 – 06:57</strong> &bull; Tabela: <strong>06:46, 06:58, 07:10</strong>",
+        "Real testado: <strong>06:46 (#3275)</strong> e <strong>06:56–06:57</strong> &bull; Tabela: <strong>06:46, 06:58, 07:10</strong>",
       alightStopId: "af037fee-4677-11ed-98db-5adc55d213d0",
       alightTitle: "Av. Senador Saraiva, 767 / 676 (Centro)",
       alightPinLabel: "2. Descer 330 • Sen. Saraiva 767",
-      alightMeta: "~22 min de viagem (chegada habitual: 07:28 – 07:32)",
-      rideTimeSec: 1336,
+      alightMeta: "~28 min reais no pico (06:46 → 07:14; ou 06:56 → 07:28–07:32)",
+      rideTimeSec: 1680,
+      gtfsBaseRideSec: 1336,
       targetWindow: ["06:46", "06:58", "07:10", "07:22"],
     },
     transfer: {
@@ -59,13 +60,14 @@ const COMMUTE_PRESETS = {
       boardTitle: "Av. Senador Saraiva, 528 (Ilha Central)",
       boardPinLabel: "3. Pegar 386 • Ilha Sen. Saraiva",
       habitualHtml:
-        "Alta variação: <strong>07:31, 07:32 a 07:45</strong> &bull; Tabela: <strong>07:24, 07:32, 07:40, 07:48</strong>",
+        "Real testado: <strong>07:20 (#287)</strong>, <strong>07:31–07:45</strong> &bull; Tabela: <strong>07:16, 07:24, 07:32, 07:40</strong>",
       alightStopId: "af05d0b2-4677-11ed-98db-5adc55d213d0",
       alightTitle: "Av. José de Souza Campos, 1358 (Cristália - Cambuí)",
       alightPinLabel: "4. Estágio Cristália (Norte-Sul, 1358)",
-      alightMeta: "~14 min de viagem (chegada habitual: ~07:50)",
-      rideTimeSec: 830,
-      targetWindow: ["07:24", "07:32", "07:40", "07:48"],
+      alightMeta: "~14 min de viagem (chegada real: ~07:34 a 07:50)",
+      rideTimeSec: 840,
+      gtfsBaseRideSec: 830,
+      targetWindow: ["07:16", "07:24", "07:32", "07:40", "07:48"],
     },
   },
   AFTERNOON: {
@@ -88,7 +90,8 @@ const COMMUTE_PRESETS = {
       alightTitle: "Av. Benjamin Constant, 1633 (Centro)",
       alightPinLabel: "2. Descer 382 • Benj. Constant 1633",
       alightMeta: "~11 min de viagem (chegada habitual: ~15:35)",
-      rideTimeSec: 663,
+      rideTimeSec: 680,
+      gtfsBaseRideSec: 663,
       targetWindow: ["15:26", "16:26"],
     },
     transfer: {
@@ -110,7 +113,8 @@ const COMMUTE_PRESETS = {
       alightTitle: "Av. Dr. Romeu Tórtima, 1550 (Em frente ao Oxxo Unicamp)",
       alightPinLabel: "4. Descer 330 • Oxxo Unicamp (1550)",
       alightMeta: "~18 min de viagem até a frente do Oxxo Unicamp",
-      rideTimeSec: 1108,
+      rideTimeSec: 1120,
+      gtfsBaseRideSec: 1108,
       targetWindow: ["15:27", "15:44", "16:01"],
     },
   },
@@ -238,6 +242,7 @@ async function fetchDirectionRealtimeClientSide(routeId, dirKey, dirData) {
   const idxSet = new Set([0, Math.floor(nStops / 2), nStops - 1]);
   stops.forEach((st, idx) => {
     if (PRIORITY_STOP_IDS.has(st.stop_id)) idxSet.add(idx);
+    if (boardedRide && boardedRide.destStopId === st.stop_id) idxSet.add(idx);
   });
   const sampleIndices = Array.from(idxSet).sort((a, b) => a - b);
 
@@ -401,7 +406,7 @@ async function fetchDirectionRealtimeClientSide(routeId, dirKey, dirData) {
       });
     }
     arrivals.sort((a, b) => a.eta_sec - b.eta_sec);
-    stopPredictions[st.stop_id] = arrivals.slice(0, 4);
+    stopPredictions[st.stop_id] = arrivals.slice(0, 8);
   });
 
   return {
@@ -439,6 +444,7 @@ let exploreDirection = "IDA";
 let realtimeDirections = {};
 let lastRealtimeSyncMs = 0;
 let deferredPwaPrompt = null;
+let boardedRide = null; // { routeId, direction, vehicleId, destStopId, boardedAtMs }
 
 const busMarkersByKey = new Map();
 
@@ -453,6 +459,236 @@ const tabExplore = document.getElementById("tab-explore");
 
 const commutePanel = document.getElementById("commute-panel");
 const explorePanel = document.getElementById("explore-panel");
+const activeRideBanner = document.getElementById("active-ride-banner");
+
+function loadBoardedRideFromStorage() {
+  try {
+    const raw = localStorage.getItem("radar_estagio_boarded_ride");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.vehicleId && Date.now() - (parsed.boardedAtMs || 0) < 3 * 3600 * 1000) {
+      boardedRide = parsed;
+    } else {
+      localStorage.removeItem("radar_estagio_boarded_ride");
+    }
+  } catch {
+    boardedRide = null;
+  }
+}
+
+function saveBoardedRideToStorage() {
+  try {
+    if (boardedRide) {
+      localStorage.setItem("radar_estagio_boarded_ride", JSON.stringify(boardedRide));
+    } else {
+      localStorage.removeItem("radar_estagio_boarded_ride");
+    }
+  } catch {}
+}
+
+function getDefaultDestStopForLine(routeId, direction) {
+  if (routeId === "330" && direction === "VOLTA") return "af037fee-4677-11ed-98db-5adc55d213d0"; // Senador Saraiva 676
+  if (routeId === "386" && direction === "VOLTA") return "af05d0b2-4677-11ed-98db-5adc55d213d0"; // Cristália
+  if (routeId === "382" && direction === "IDA") return "af04204f-4677-11ed-98db-5adc55d213d0"; // Benjamin Constant 1633
+  if (routeId === "330" && direction === "IDA") return "af0f6d7d-4677-11ed-98db-5adc55d213d0"; // Oxxo Romeu Tórtima 1550
+  const dirData = transitData?.routes?.[routeId]?.directions?.[direction];
+  if (dirData && dirData.stops && dirData.stops.length > 0) {
+    return dirData.stops[dirData.stops.length - 1].stop_id;
+  }
+  return "";
+}
+
+function boardBus(routeId, direction, vehicleId, destStopId) {
+  const targetDest = destStopId || getDefaultDestStopForLine(routeId, direction);
+  boardedRide = {
+    routeId: String(routeId),
+    direction: String(direction),
+    vehicleId: String(vehicleId),
+    destStopId: targetDest,
+    boardedAtMs: Date.now(),
+  };
+  saveBoardedRideToStorage();
+  populateRideDestDropdown();
+  updateActiveRideBanner();
+  updateRealtimeCardsAndMarkers();
+  fetchRealtimeData();
+
+  const key = `${routeId}_${direction}_${vehicleId}`;
+  const marker = busMarkersByKey.get(key);
+  if (marker) {
+    map.flyTo(marker.getLatLng(), 15, { duration: 0.6 });
+  }
+}
+
+function leaveBus() {
+  boardedRide = null;
+  saveBoardedRideToStorage();
+  if (activeRideBanner) activeRideBanner.style.display = "none";
+  updateRealtimeCardsAndMarkers();
+}
+
+window.boardBusFromPopup = (routeId, direction, vehicleId) => {
+  boardBus(routeId, direction, vehicleId, null);
+  map.closePopup();
+};
+
+function populateRideDestDropdown() {
+  const selectEl = document.getElementById("ride-dest-select");
+  if (!selectEl || !boardedRide || !transitData) return;
+  const dirData = transitData.routes?.[boardedRide.routeId]?.directions?.[boardedRide.direction];
+  if (!dirData || !dirData.stops) return;
+
+  selectEl.innerHTML = dirData.stops
+    .map(
+      (st) =>
+        `<option value="${st.stop_id}" ${st.stop_id === boardedRide.destStopId ? "selected" : ""}>${st.sequence}. ${st.name}</option>`
+    )
+    .join("");
+}
+
+/**
+ * Calcula de forma dinâmica (em tempo real via GPS Cittamobi + calibração de trânsito)
+ * o tempo restante em segundos até o ponto de descida (destStopId).
+ */
+function computeDynamicDestEtaSec(vehicleId, etaBoardSec, stepCfg, rtDir, dirData) {
+  const destStopId = stepCfg.alightStopId;
+  const boardStop = dirData?.stops?.find((s) => s.stop_id === stepCfg.boardStopId);
+  const destStop = dirData?.stops?.find((s) => s.stop_id === destStopId);
+
+  const gtfsSegSec =
+    boardStop && destStop
+      ? Math.max(60, destStop.travel_time_sec - boardStop.travel_time_sec)
+      : stepCfg.gtfsBaseRideSec || stepCfg.rideTimeSec;
+  const trafficRatio = stepCfg.rideTimeSec / Math.max(1, gtfsSegSec);
+
+  // 1) Verifica se o Cittamobi já tem previsão direta por GPS para este prefixo no ponto de descida
+  const directDestList = rtDir?.stop_predictions?.[destStopId] || [];
+  const directMatch = directDestList.find((p) => p.vehicle_id === vehicleId);
+
+  if (directMatch) {
+    // Se o ônibus ainda não passou no ponto de embarque, somamos o tempo até o embarque + o trecho calibrado
+    if (etaBoardSec !== null && etaBoardSec > 0) {
+      const rawSegFromCittamobi = Math.max(60, directMatch.eta_sec - etaBoardSec);
+      const calibratedSeg = Math.round(rawSegFromCittamobi * Math.max(1, trafficRatio));
+      return etaBoardSec + calibratedSeg;
+    }
+    // Se o ônibus JÁ passou do ponto de embarque e está a caminho da descida:
+    return Math.max(0, Math.round(directMatch.eta_sec * Math.max(1, trafficRatio * 0.95)));
+  }
+
+  // 2) Se não estiver na lista curta do ponto de descida, calcula pela posição tau_sec do veículo na linha
+  const activeVeh = (rtDir?.active_vehicles || []).find((v) => v.vehicle_id === vehicleId);
+  if (activeVeh && destStop) {
+    const elapsedSec = lastRealtimeSyncMs ? Math.max(0, (Date.now() - lastRealtimeSyncMs) / 1000.0) : 0;
+    const curTau = activeVeh.tau_sec + elapsedSec;
+    if (etaBoardSec !== null && etaBoardSec > 0) {
+      return etaBoardSec + stepCfg.rideTimeSec;
+    }
+    const remGtfsSec = Math.max(0, destStop.travel_time_sec - curTau);
+    return Math.round(remGtfsSec * Math.max(1, trafficRatio));
+  }
+
+  return (etaBoardSec || 0) + stepCfg.rideTimeSec;
+}
+
+function updateActiveRideBanner() {
+  if (!activeRideBanner) return;
+  if (!boardedRide || !transitData) {
+    activeRideBanner.style.display = "none";
+    return;
+  }
+
+  activeRideBanner.style.display = "flex";
+  const { routeId, direction, vehicleId, destStopId } = boardedRide;
+  const dirKey = `${routeId}_${direction}`;
+  const dirData = transitData.routes?.[routeId]?.directions?.[direction];
+  const rtDir = realtimeDirections[dirKey];
+
+  const titleEl = document.getElementById("ride-title-tag");
+  const nextStopNameEl = document.getElementById("ride-next-stop-name");
+  const nextStopEtaEl = document.getElementById("ride-next-stop-eta");
+  const progressFillEl = document.getElementById("ride-progress-fill");
+  const stopsLeftEl = document.getElementById("ride-stops-left");
+  const destClockEl = document.getElementById("ride-dest-clock");
+  const destCountdownEl = document.getElementById("ride-dest-countdown");
+
+  if (!dirData) return;
+
+  const selectEl = document.getElementById("ride-dest-select");
+  if (selectEl && selectEl.options.length === 0) {
+    populateRideDestDropdown();
+  }
+
+  const destStop =
+    dirData.stops.find((s) => s.stop_id === destStopId) || dirData.stops[dirData.stops.length - 1];
+  const elapsedSec = lastRealtimeSyncMs ? Math.min(25, Math.max(0, (Date.now() - lastRealtimeSyncMs) / 1000.0)) : 0;
+
+  const veh = (rtDir?.active_vehicles || []).find((v) => v.vehicle_id === vehicleId);
+  const directDestPred = (rtDir?.stop_predictions?.[destStop.stop_id] || []).find(
+    (p) => p.vehicle_id === vehicleId
+  );
+
+  // Fator de calibração de pico para a linha 330 VOLTA de manhã (28 min reais vs 22 min tabela)
+  const isMorning330Peak =
+    routeId === "330" && direction === "VOLTA" && new Date().getHours() >= 6 && new Date().getHours() <= 9;
+  const speedScale = isMorning330Peak ? 1680 / 1336 : 1.0;
+
+  if (veh) {
+    const curTau = veh.tau_sec + elapsedSec;
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId} (${veh.is_realtime ? "GPS Ao Vivo" : "Estimado"})`;
+
+    // Encontrar a próxima parada imediata na rua
+    let nextStopObj = dirData.stops.find((s) => s.sequence === veh.next_stop_sequence) || dirData.stops[0];
+    for (let k = 0; k < dirData.stops.length; k++) {
+      if (dirData.stops[k].travel_time_sec >= curTau) {
+        nextStopObj = dirData.stops[k];
+        break;
+      }
+    }
+
+    const etaNextSec = Math.max(0, Math.round(nextStopObj.travel_time_sec - curTau));
+    nextStopNameEl.textContent = `${nextStopObj.sequence}. ${nextStopObj.name}`;
+    nextStopEtaEl.textContent = `${formatEtaSeconds(etaNextSec)} (${formatArrivalClockTime(etaNextSec)})`;
+
+    // Calcular tempo até o ponto de descida escolhido
+    let etaDestSec = 0;
+    if (directDestPred) {
+      etaDestSec = Math.max(0, Math.round((directDestPred.eta_sec - elapsedSec) * speedScale));
+    } else {
+      etaDestSec = Math.max(0, Math.round((destStop.travel_time_sec - curTau) * speedScale));
+    }
+
+    const stopsRemaining = Math.max(0, destStop.sequence - nextStopObj.sequence + 1);
+    const pct = Math.max(
+      5,
+      Math.min(100, Math.round((nextStopObj.sequence / Math.max(1, destStop.sequence)) * 100))
+    );
+    progressFillEl.style.width = `${pct}%`;
+
+    if (stopsRemaining === 0 || etaDestSec <= 25) {
+      stopsLeftEl.textContent = "🔔 Prepare-se para descer!";
+      destClockEl.textContent = "Agora";
+      destCountdownEl.textContent = "(chegando no ponto)";
+    } else {
+      stopsLeftEl.textContent = `Faltam ${stopsRemaining} ${stopsRemaining === 1 ? "parada" : "paradas"}`;
+      destClockEl.textContent = `~${formatArrivalClockTime(etaDestSec)}`;
+      destCountdownEl.textContent = `(${formatEtaSeconds(etaDestSec)})`;
+    }
+  } else if (directDestPred) {
+    const etaDestSec = Math.max(0, Math.round((directDestPred.eta_sec - elapsedSec) * speedScale));
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}`;
+    nextStopNameEl.textContent = `Rumo a ${destStop.name}`;
+    nextStopEtaEl.textContent = formatEtaSeconds(etaDestSec);
+    progressFillEl.style.width = "65%";
+    stopsLeftEl.textContent = "Em trânsito até sua descida";
+    destClockEl.textContent = `~${formatArrivalClockTime(etaDestSec)}`;
+    destCountdownEl.textContent = `(${formatEtaSeconds(etaDestSec)})`;
+  } else {
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}`;
+    nextStopNameEl.textContent = "Sincronizando posição GPS na via...";
+    nextStopEtaEl.textContent = "Aguarde";
+  }
+}
 
 function updateClock() {
   const now = new Date();
@@ -507,12 +743,12 @@ async function initApp() {
   updateClock();
   setInterval(updateClock, 1000);
 
-  // Registrar Service Worker para PWA no Android / LineageOS
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 
-  // Selecionar automaticamente Manhã (antes das 12h) ou Tarde (12h às 19h)
+  loadBoardedRideFromStorage();
+
   const curHour = new Date().getHours();
   currentMode = curHour >= 12 && curHour < 19 ? "AFTERNOON" : "MORNING";
 
@@ -521,6 +757,10 @@ async function initApp() {
     transitData = await res.json();
 
     setupEventListeners();
+    if (boardedRide) {
+      populateRideDestDropdown();
+      updateActiveRideBanner();
+    }
     syncActiveModeTabs();
     renderActiveView(true);
 
@@ -533,23 +773,31 @@ async function initApp() {
   }
 }
 
-/**
- * Busca dados em tempo real diretamente da API do Cittamobi no navegador
- * (funciona 100% na nuvem / GitHub Pages / 4G sem depender do servidor Python)
- */
 async function fetchRealtimeData() {
   if (!transitData || !transitData.routes) return;
   try {
     liveStatusText.textContent = "Sincronizando GPS...";
 
-    // Descobrir quais sentidos precisamos atualizar para o modo atual
+    const pairKeySet = new Set();
     const pairsToFetch = [];
+    const addPair = (rId, dKey) => {
+      const k = `${rId}_${dKey}`;
+      if (!pairKeySet.has(k) && transitData.routes[rId]?.directions?.[dKey]) {
+        pairKeySet.add(k);
+        pairsToFetch.push([rId, dKey]);
+      }
+    };
+
     if (currentMode === "EXPLORE") {
-      pairsToFetch.push([exploreRouteId, exploreDirection]);
+      addPair(exploreRouteId, exploreDirection);
     } else {
       const preset = COMMUTE_PRESETS[currentMode];
-      pairsToFetch.push([preset.step1.routeId, preset.step1.direction]);
-      pairsToFetch.push([preset.step2.routeId, preset.step2.direction]);
+      addPair(preset.step1.routeId, preset.step1.direction);
+      addPair(preset.step2.routeId, preset.step2.direction);
+    }
+
+    if (boardedRide) {
+      addPair(boardedRide.routeId, boardedRide.direction);
     }
 
     const results = await Promise.all(
@@ -566,6 +814,7 @@ async function fetchRealtimeData() {
     lastRealtimeSyncMs = Date.now();
     lastSyncTimeEl.textContent = `GPS: ${new Date().toLocaleTimeString("pt-BR")}`;
     liveStatusText.textContent = "GPS Ao Vivo • EMDEC";
+    updateActiveRideBanner();
     updateRealtimeCardsAndMarkers();
   } catch (e) {
     console.warn("Tentando fallback local /api/realtime:", e);
@@ -576,6 +825,7 @@ async function fetchRealtimeData() {
         realtimeDirections = data.directions;
         lastRealtimeSyncMs = Date.now();
         liveStatusText.textContent = "GPS Ao Vivo • Local";
+        updateActiveRideBanner();
         updateRealtimeCardsAndMarkers();
       }
     } catch {
@@ -745,6 +995,7 @@ function updateRealtimeCardsAndMarkers() {
   if (currentMode === "EXPLORE") {
     const dirKey = `${exploreRouteId}_${exploreDirection}`;
     const rtDir = realtimeDirections[dirKey];
+    renderExploreActiveBuses(rtDir ? rtDir.active_vehicles || [] : []);
     renderBusMarkersOnMap(rtDir ? rtDir.active_vehicles || [] : []);
     return;
   }
@@ -759,19 +1010,123 @@ function updateRealtimeCardsAndMarkers() {
   const preds1 = (rt1.stop_predictions && rt1.stop_predictions[preset.step1.boardStopId]) || [];
   const preds2 = (rt2.stop_predictions && rt2.stop_predictions[preset.step2.boardStopId]) || [];
 
-  renderStepLiveEtas("step1-live-etas", preds1, preset.step1, s1Key);
-  renderStepLiveEtas("step2-live-etas", preds2, preset.step2, s2Key);
-  updateTransferSyncStatus(preds1, preds2, preset);
+  renderStepLiveEtas("step1-live-etas", preds1, preset.step1, s1Key, rt1);
+  renderStepLiveEtas("step2-live-etas", preds2, preset.step2, s2Key, rt2);
+  updateTransferSyncStatus(preds1, preds2, preset, rt1);
 
   const combinedBuses = [...(rt1.active_vehicles || []), ...(rt2.active_vehicles || [])];
   renderBusMarkersOnMap(combinedBuses);
 }
 
-function renderStepLiveEtas(containerId, preds, stepCfg, dirKey) {
+function renderStepLiveEtas(containerId, preds, stepCfg, dirKey, rtDir) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  if (!preds || preds.length === 0) {
+  const dirData = transitData?.routes?.[stepCfg.routeId]?.directions?.[stepCfg.direction];
+  const boardStop = dirData?.stops?.find((s) => s.stop_id === stepCfg.boardStopId);
+  const alightStop = dirData?.stops?.find((s) => s.stop_id === stepCfg.alightStopId);
+
+  // Também inclui ônibus que JÁ acabaram de passar pelo ponto de embarque e estão em trânsito rumo à descida!
+  const approachingIds = new Set((preds || []).map((p) => p.vehicle_id));
+  const inTransitVehicles = [];
+
+  if (boardStop && alightStop && rtDir?.active_vehicles) {
+    rtDir.active_vehicles.forEach((v) => {
+      if (
+        v.state === "IN_TRANSIT" &&
+        !approachingIds.has(v.vehicle_id) &&
+        v.tau_sec >= boardStop.travel_time_sec - 45 &&
+        v.tau_sec <= alightStop.travel_time_sec - 30
+      ) {
+        inTransitVehicles.push(v);
+      }
+    });
+  }
+
+  const rowsHtml = [];
+
+  // 1) Ônibus já na via entre o embarque e a descida (ex: você acabou de entrar no #3275)
+  inTransitVehicles.slice(0, 2).forEach((v) => {
+    const isLive = v.is_realtime;
+    const isBoardedThis =
+      boardedRide &&
+      boardedRide.routeId === stepCfg.routeId &&
+      boardedRide.direction === stepCfg.direction &&
+      boardedRide.vehicleId === v.vehicle_id;
+
+    const etaDestSec = computeDynamicDestEtaSec(v.vehicle_id, null, stepCfg, rtDir, dirData);
+    const arrivalAtDestClock = formatArrivalClockTime(etaDestSec);
+    const busKey = `${dirKey}_${v.vehicle_id}`;
+
+    rowsHtml.push(`
+      <div class="eta-row-card ${isLive ? "is-live" : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
+        <div class="eta-bus-left">
+          <span class="eta-bus-badge ${isLive ? "live" : ""}">#${v.vehicle_id}</span>
+          <div class="eta-bus-desc">
+            <span class="eta-bus-status">${isBoardedThis ? "✅ Você está neste ônibus" : "Na via rumo à descida"}</span>
+            <span class="eta-bus-sub">Próx: <strong>${v.next_stop_name}</strong> &rarr; Desce às <strong>~${arrivalAtDestClock}</strong> (${formatEtaSeconds(etaDestSec)})</span>
+          </div>
+        </div>
+        <div class="eta-right-stack">
+          <button
+            type="button"
+            class="btn-board-bus ${isBoardedThis ? "boarded-active" : ""}"
+            data-board-route="${stepCfg.routeId}"
+            data-board-dir="${stepCfg.direction}"
+            data-board-vid="${v.vehicle_id}"
+            data-board-dest="${stepCfg.alightStopId}"
+          >
+            ${isBoardedThis ? "✓ Embarcado" : "🚍 Entrei neste"}
+          </button>
+        </div>
+      </div>
+    `);
+  });
+
+  // 2) Próximos ônibus chegando no ponto de embarque
+  (preds || []).slice(0, 3).forEach((p) => {
+    const isLive = p.is_realtime;
+    const isBoardedThis =
+      boardedRide &&
+      boardedRide.routeId === stepCfg.routeId &&
+      boardedRide.direction === stepCfg.direction &&
+      boardedRide.vehicleId === p.vehicle_id;
+
+    const etaDestSec = computeDynamicDestEtaSec(p.vehicle_id, p.eta_sec, stepCfg, rtDir, dirData);
+    const arrivalAtBoardClock = formatArrivalClockTime(p.eta_sec);
+    const arrivalAtDestClock = formatArrivalClockTime(etaDestSec);
+    const busKey = `${dirKey}_${p.vehicle_id}`;
+
+    rowsHtml.push(`
+      <div class="eta-row-card ${isLive ? "is-live" : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
+        <div class="eta-bus-left">
+          <span class="eta-bus-badge ${isLive ? "live" : ""}">#${p.vehicle_id}</span>
+          <div class="eta-bus-desc">
+            <span class="eta-bus-status">${isBoardedThis ? "✅ Você está neste ônibus" : isLive ? "GPS Ao Vivo • Calculado" : "Programado • Estimado"}</span>
+            <span class="eta-bus-sub">Passa às <strong>${arrivalAtBoardClock}</strong> &rarr; Desce às <strong>~${arrivalAtDestClock}</strong></span>
+          </div>
+        </div>
+        <div class="eta-right-stack">
+          <div class="eta-time-right">
+            <span class="eta-countdown">${formatEtaSeconds(p.eta_sec)}</span>
+            <span class="eta-clock-arrival">${isLive ? "GPS Real" : "Estimado"}</span>
+          </div>
+          <button
+            type="button"
+            class="btn-board-bus ${isBoardedThis ? "boarded-active" : ""}"
+            data-board-route="${stepCfg.routeId}"
+            data-board-dir="${stepCfg.direction}"
+            data-board-vid="${p.vehicle_id}"
+            data-board-dest="${stepCfg.alightStopId}"
+          >
+            ${isBoardedThis ? "✓ Embarcado" : "🚍 Entrei neste"}
+          </button>
+        </div>
+      </div>
+    `);
+  });
+
+  if (rowsHtml.length === 0) {
     container.innerHTML = `
       <div class="eta-row-card">
         <div class="eta-bus-desc">
@@ -783,31 +1138,27 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey) {
     return;
   }
 
-  container.innerHTML = preds
-    .slice(0, 2)
-    .map((p) => {
-      const isLive = p.is_realtime;
-      const arrivalAtBoardClock = formatArrivalClockTime(p.eta_sec);
-      const arrivalAtDestClock = formatArrivalClockTime(p.eta_sec + stepCfg.rideTimeSec);
-      const busKey = `${dirKey}_${p.vehicle_id}`;
+  container.innerHTML = rowsHtml.join("");
 
-      return `
-        <div class="eta-row-card ${isLive ? "is-live" : ""}" data-bus-key="${busKey}">
-          <div class="eta-bus-left">
-            <span class="eta-bus-badge ${isLive ? "live" : ""}">#${p.vehicle_id}</span>
-            <div class="eta-bus-desc">
-              <span class="eta-bus-status">${isLive ? "GPS Ao Vivo na Via" : "Programado na Tabela"}</span>
-              <span class="eta-bus-sub">Passa às <strong>${arrivalAtBoardClock}</strong> &rarr; Desce às <strong>~${arrivalAtDestClock}</strong></span>
-            </div>
-          </div>
-          <div class="eta-time-right">
-            <span class="eta-countdown">${formatEtaSeconds(p.eta_sec)}</span>
-            <span class="eta-clock-arrival">${isLive ? "Tempo Real" : "Estimado"}</span>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
+  container.querySelectorAll(".btn-board-bus").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const rId = btn.dataset.boardRoute;
+      const dKey = btn.dataset.boardDir;
+      const vId = btn.dataset.boardVid;
+      const destId = btn.dataset.boardDest;
+      if (
+        boardedRide &&
+        boardedRide.routeId === rId &&
+        boardedRide.direction === dKey &&
+        boardedRide.vehicleId === vId
+      ) {
+        leaveBus();
+      } else {
+        boardBus(rId, dKey, vId, destId);
+      }
+    });
+  });
 
   container.querySelectorAll(".eta-row-card[data-bus-key]").forEach((row) => {
     row.addEventListener("click", () => {
@@ -821,33 +1172,109 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey) {
   });
 }
 
-function updateTransferSyncStatus(preds1, preds2, preset) {
+function updateTransferSyncStatus(preds1, preds2, preset, rt1) {
   const radarEl = document.getElementById("transfer-radar-status");
   if (!radarEl) return;
 
-  if (!preds1.length || !preds2.length) {
+  const dirData1 = transitData?.routes?.[preset.step1.routeId]?.directions?.[preset.step1.direction];
+
+  // Se o usuário já clicou em "Entrei neste" no ônibus do Passo 1, calcula a conexão a partir dele!
+  let readyAtTransferSec = null;
+  let step1VehicleLabel = null;
+
+  if (
+    boardedRide &&
+    boardedRide.routeId === preset.step1.routeId &&
+    boardedRide.direction === preset.step1.direction
+  ) {
+    const etaDestSec = computeDynamicDestEtaSec(
+      boardedRide.vehicleId,
+      null,
+      preset.step1,
+      rt1,
+      dirData1
+    );
+    readyAtTransferSec = etaDestSec + preset.transfer.walkSeconds;
+    step1VehicleLabel = `#${boardedRide.vehicleId} (embarcado)`;
+  } else if (preds1 && preds1.length > 0) {
+    const firstBus = preds1[0];
+    const etaDestSec = computeDynamicDestEtaSec(
+      firstBus.vehicle_id,
+      firstBus.eta_sec,
+      preset.step1,
+      rt1,
+      dirData1
+    );
+    readyAtTransferSec = etaDestSec + preset.transfer.walkSeconds;
+    step1VehicleLabel = `#${firstBus.vehicle_id}`;
+  }
+
+  if (readyAtTransferSec === null || !preds2 || !preds2.length) {
     radarEl.textContent = `Janela alvo no Centro: ${preset.step2.targetWindow.join(" • ")}`;
     return;
   }
 
-  const firstBus = preds1[0];
-  const readyAtTransferSec = firstBus.eta_sec + preset.step1.rideTimeSec + preset.transfer.walkSeconds;
   const readyClock = formatArrivalClockTime(readyAtTransferSec);
-
   const reachableBus2 = preds2.find((p2) => p2.eta_sec >= readyAtTransferSec - 45);
 
   if (reachableBus2) {
     const waitMin = Math.max(0, Math.round((reachableBus2.eta_sec - readyAtTransferSec) / 60));
     const bus2Clock = formatArrivalClockTime(reachableBus2.eta_sec);
-    if (waitMin <= 3) {
-      radarEl.innerHTML = `⚡ <strong>Conexão Rápida:</strong> Chega no Centro às <strong>${readyClock}</strong> e pega o <strong>#${reachableBus2.vehicle_id}</strong> às <strong>${bus2Clock}</strong> (espera ~${waitMin} min).`;
+    if (waitMin <= 4) {
+      radarEl.innerHTML = `⚡ <strong>Conexão Rápida (${step1VehicleLabel}):</strong> Na ilha às <strong>${readyClock}</strong> &rarr; pega o <strong>${preset.step2.routeId} #${reachableBus2.vehicle_id}</strong> às <strong>${bus2Clock}</strong> (espera ~${waitMin} min).`;
     } else {
-      radarEl.innerHTML = `✅ <strong>Conexão Tranquila:</strong> Chega no Centro às <strong>${readyClock}</strong> e pega o <strong>#${reachableBus2.vehicle_id}</strong> às <strong>${bus2Clock}</strong> (espera ~${waitMin} min).`;
+      radarEl.innerHTML = `✅ <strong>Conexão Sincronizada (${step1VehicleLabel}):</strong> Na ilha às <strong>${readyClock}</strong> &rarr; pega o <strong>${preset.step2.routeId} #${reachableBus2.vehicle_id}</strong> às <strong>${bus2Clock}</strong> (espera ~${waitMin} min).`;
     }
   } else {
     const nextImmediate = preds2[0];
     radarEl.innerHTML = `ℹ️ Próximo <strong>${preset.step2.routeId} (#${nextImmediate.vehicle_id})</strong> passa no Centro em <strong>${formatEtaSeconds(nextImmediate.eta_sec)}</strong> (${formatArrivalClockTime(nextImmediate.eta_sec)}).`;
   }
+}
+
+function renderExploreActiveBuses(vehicles) {
+  const box = document.getElementById("explore-active-buses");
+  if (!box) return;
+  if (!vehicles || vehicles.length === 0) {
+    box.innerHTML = `<div style="font-size:0.72rem;color:#64748b;">Nenhum ônibus em trânsito neste sentido agora.</div>`;
+    return;
+  }
+
+  box.innerHTML = vehicles
+    .slice(0, 4)
+    .map((v) => {
+      const isBoardedThis =
+        boardedRide &&
+        boardedRide.routeId === v.route_id &&
+        boardedRide.direction === v.direction &&
+        boardedRide.vehicleId === v.vehicle_id;
+      return `
+        <div class="eta-row-card ${v.is_realtime ? "is-live" : ""} ${isBoardedThis ? "is-boarded" : ""}" style="padding:6px 8px;">
+          <div class="eta-bus-left">
+            <span class="eta-bus-badge ${v.is_realtime ? "live" : ""}">#${v.vehicle_id}</span>
+            <div class="eta-bus-desc">
+              <span class="eta-bus-status">Próx: ${v.next_stop_name} (${formatEtaSeconds(v.eta_next_stop_sec)})</span>
+              <span class="eta-bus-sub">${v.status_label}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn-board-bus ${isBoardedThis ? "boarded-active" : ""}"
+            data-exp-route="${v.route_id}"
+            data-exp-dir="${v.direction}"
+            data-exp-vid="${v.vehicle_id}"
+          >
+            ${isBoardedThis ? "✓ Embarcado" : "🚍 Entrei neste"}
+          </button>
+        </div>
+      `;
+    })
+    .join("");
+
+  box.querySelectorAll(".btn-board-bus").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      boardBus(btn.dataset.expRoute, btn.dataset.expDir, btn.dataset.expVid, null);
+    });
+  });
 }
 
 function renderBusMarkersOnMap(vehicles) {
@@ -857,15 +1284,20 @@ function renderBusMarkersOnMap(vehicles) {
   vehicles.forEach((v) => {
     const key = `${v.route_id}_${v.direction}_${v.vehicle_id}`;
     const isLive = v.is_realtime;
+    const isBoardedThis =
+      boardedRide &&
+      boardedRide.routeId === v.route_id &&
+      boardedRide.direction === v.direction &&
+      boardedRide.vehicleId === v.vehicle_id;
 
     const icon = L.divIcon({
       className: "bus-map-marker",
-      iconSize: [92, 34],
-      iconAnchor: [46, 17],
+      iconSize: [98, 34],
+      iconAnchor: [49, 17],
       html: `
         <div class="bus-marker-container">
-          <div class="bus-marker-bubble ${isLive ? "is-live" : ""}">
-            <span>🚌 ${v.route_id} • #${v.vehicle_id}</span>
+          <div class="bus-marker-bubble ${isLive ? "is-live" : ""}" style="${isBoardedThis ? "background:#2563eb;border-color:#fde047;box-shadow:0 0 0 5px rgba(37,99,235,0.45);" : ""}">
+            <span>${isBoardedThis ? "🚍" : "🚌"} ${v.route_id} • #${v.vehicle_id}</span>
           </div>
         </div>
       `,
@@ -873,19 +1305,26 @@ function renderBusMarkersOnMap(vehicles) {
 
     const marker = L.marker([v.lat, v.lon], {
       icon,
-      zIndexOffset: isLive ? 1000 : 500,
+      zIndexOffset: isBoardedThis ? 1500 : isLive ? 1000 : 500,
     });
 
     marker.bindPopup(`
-      <div style="min-width:210px;">
+      <div style="min-width:215px;">
         <strong>Ônibus ${v.route_id} • Prefixo #${v.vehicle_id}</strong><br>
         <span style="font-size:0.75rem;color:${isLive ? "#059669" : "#64748b"};font-weight:700;">
           ${v.status_label}
         </span>
         <div style="font-size:0.75rem;color:#334155;margin-top:6px;">
           <strong>Próxima parada:</strong> ${v.next_stop_name}<br>
-          <strong>Chegada na parada:</strong> ${formatEtaSeconds(v.eta_next_stop_sec)}
+          <strong>Chegada na parada:</strong> ${formatEtaSeconds(v.eta_next_stop_sec)} (${formatArrivalClockTime(v.eta_next_stop_sec)})
         </div>
+        <button
+          type="button"
+          onclick="window.boardBusFromPopup('${v.route_id}', '${v.direction}', '${v.vehicle_id}')"
+          style="margin-top:8px;width:100%;background:#0f172a;color:#fff;border:none;padding:6px 10px;border-radius:5px;font-size:0.74rem;font-weight:700;cursor:pointer;"
+        >
+          🚍 Entrei neste ônibus (#${v.vehicle_id})
+        </button>
       </div>
     `);
 
@@ -898,6 +1337,10 @@ function tickSmoothVehicles() {
   if (!transitData || !lastRealtimeSyncMs) return;
   const elapsedSec = (Date.now() - lastRealtimeSyncMs) / 1000.0;
   if (elapsedSec <= 0 || elapsedSec > 30) return;
+
+  if (boardedRide) {
+    updateActiveRideBanner();
+  }
 
   Object.values(realtimeDirections).forEach((rtDir) => {
     const route = transitData.routes[rtDir.route_id];
@@ -955,6 +1398,8 @@ function renderExploreView(shouldFitBounds) {
   const q = (document.getElementById("stop-search").value || "").trim().toLowerCase();
   listEl.innerHTML = "";
 
+  const rtDir = realtimeDirections[`${exploreRouteId}_${exploreDirection}`];
+
   dirData.stops.forEach((st) => {
     const m = L.circleMarker([st.lat, st.lon], {
       radius: 5,
@@ -963,7 +1408,16 @@ function renderExploreView(shouldFitBounds) {
       weight: 2.5,
       fillOpacity: 1,
     }).addTo(pinsLayerGroup);
-    m.bindPopup(`<strong>${st.sequence}. ${st.name}</strong><br><small>Horários: ${st.departures.slice(0, 8).join(", ")}</small>`);
+
+    const stopPreds = rtDir?.stop_predictions?.[st.stop_id] || [];
+    const liveHtml =
+      stopPreds.length > 0
+        ? `<div style="margin-top:3px;color:#059669;font-weight:700;font-size:0.71rem;">⚡ Próximo: #${stopPreds[0].vehicle_id} em ${formatEtaSeconds(stopPreds[0].eta_sec)} (${formatArrivalClockTime(stopPreds[0].eta_sec)})</div>`
+        : "";
+
+    m.bindPopup(
+      `<strong>${st.sequence}. ${st.name}</strong>${liveHtml}<br><small>Tabela: ${st.departures.slice(0, 8).join(", ")}</small>`
+    );
 
     if (q && !st.name.toLowerCase().includes(q)) return;
 
@@ -971,7 +1425,8 @@ function renderExploreView(shouldFitBounds) {
     li.className = "stop-item";
     li.innerHTML = `
       <div class="stop-name">${st.sequence}. ${st.name}</div>
-      <div class="stop-sched">Horários: ${st.departures.join(", ")}</div>
+      ${liveHtml}
+      <div class="stop-sched">Tabela: ${st.departures.join(", ")}</div>
     `;
     li.onclick = () => {
       map.flyTo([st.lat, st.lon], 17, { duration: 0.6 });
@@ -991,6 +1446,18 @@ function setupEventListeners() {
     });
   });
 
+  document.getElementById("btn-leave-bus")?.addEventListener("click", () => {
+    leaveBus();
+  });
+
+  document.getElementById("ride-dest-select")?.addEventListener("change", (e) => {
+    if (!boardedRide) return;
+    boardedRide.destStopId = e.target.value;
+    saveBoardedRideToStorage();
+    updateActiveRideBanner();
+    fetchRealtimeData();
+  });
+
   document.getElementById("btn-fit-commute").addEventListener("click", () => {
     renderActiveView(true);
   });
@@ -999,7 +1466,6 @@ function setupEventListeners() {
     fetchRealtimeData();
   });
 
-  // Botão "📍 Meu GPS" para localizar o usuário na rua pelo celular
   document.getElementById("btn-my-gps").addEventListener("click", () => {
     if (!navigator.geolocation) {
       alert("Geolocalização não suportada neste navegador.");
@@ -1030,14 +1496,12 @@ function setupEventListeners() {
     );
   });
 
-  // Botão Mobile para expandir/reduzir área do mapa
   const appLayout = document.getElementById("app-layout");
   document.getElementById("btn-toggle-mobile-map").addEventListener("click", () => {
     appLayout.classList.toggle("map-expanded");
     setTimeout(() => map.invalidateSize(), 280);
   });
 
-  // Prompt de Instalação PWA no Android
   const btnInstall = document.getElementById("btn-install-pwa");
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
