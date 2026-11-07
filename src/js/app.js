@@ -329,6 +329,7 @@ async function fetchDirectionRealtimeClientSide(routeId, dirKey, dirData) {
         headsign: dirData.headsign,
         state: "IN_TRANSIT",
         is_realtime: isRt,
+        last_sync_ms: Date.now(),
         status_label: isRt ? "GPS Ao Vivo • Em trânsito" : "Estimado • Em trânsito",
         lat: pos.lat,
         lon: pos.lon,
@@ -388,6 +389,7 @@ async function fetchDirectionRealtimeClientSide(routeId, dirKey, dirData) {
             eta_sec: Math.max(0, etaS),
             eta_min: Math.max(0, Math.round(etaS / 60)),
             is_realtime: Boolean(v.isRealTime),
+            last_sync_ms: Date.now(),
           });
         }
       });
@@ -401,6 +403,7 @@ async function fetchDirectionRealtimeClientSide(routeId, dirKey, dirData) {
             eta_sec: Math.max(0, etaS),
             eta_min: Math.max(0, Math.round(etaS / 60)),
             is_realtime: run.is_realtime,
+            last_sync_ms: Date.now(),
           });
         }
       });
@@ -597,7 +600,15 @@ function getDefaultDestStopForLine(routeId, direction) {
   return "";
 }
 
+let hasFiredArrivalAlert = false;
+
 function boardBus(routeId, direction, vehicleId, destStopId) {
+  hasFiredArrivalAlert = false;
+  // Solicita permissão silenciosamente para notificação no Android
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
+
   const targetDest = destStopId || getDefaultDestStopForLine(routeId, direction);
   boardedRide = {
     routeId: String(routeId),
@@ -620,6 +631,7 @@ function boardBus(routeId, direction, vehicleId, destStopId) {
 }
 
 function leaveBus() {
+  hasFiredArrivalAlert = false;
   boardedRide = null;
   saveBoardedRideToStorage();
   if (activeRideBanner) activeRideBanner.style.display = "none";
@@ -732,9 +744,12 @@ function updateActiveRideBanner() {
     routeId === "330" && direction === "VOLTA" && new Date().getHours() >= 6 && new Date().getHours() <= 9;
   const speedScale = isMorning330Peak ? 1680 / 1336 : 1.0;
 
+  const isGpsStale = lastRealtimeSyncMs && Date.now() - lastRealtimeSyncMs >= 120000;
+  const staleTag = isGpsStale ? " ⚠️ Sinal pausado (+2m)" : "";
+
   if (veh) {
     const curTau = veh.tau_sec + elapsedSec;
-    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId} (${veh.is_realtime ? "GPS Ao Vivo" : "Estimado"})`;
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId} (${veh.is_realtime ? (isGpsStale ? "GPS pausado +2m" : "GPS Ao Vivo") : "Estimado"})${staleTag}`;
 
     // Encontrar a próxima parada imediata na rua
     let nextStopObj = dirData.stops.find((s) => s.sequence === veh.next_stop_sequence) || dirData.stops[0];
@@ -764,10 +779,35 @@ function updateActiveRideBanner() {
     );
     progressFillEl.style.width = `${pct}%`;
 
-    if (stopsRemaining === 0 || etaDestSec <= 25) {
-      stopsLeftEl.textContent = "🔔 Prepare-se para descer!";
-      destClockEl.textContent = "Agora";
-      destCountdownEl.textContent = "(chegando no ponto)";
+    // Alerta de proximidade (Vibração e Notificação silenciosa quando faltar 1 parada ou <= 2 min)
+    if (stopsRemaining <= 1 || etaDestSec <= 120) {
+      if (!hasFiredArrivalAlert) {
+        hasFiredArrivalAlert = true;
+        // Vibração nativa no celular (sem som)
+        if ("vibrate" in navigator) {
+          try {
+            navigator.vibrate([400, 250, 400, 250, 600]);
+          } catch {}
+        }
+        // Notificação nativa no celular (sem som, silenciosa)
+        if ("Notification" in window && Notification.permission === "granted") {
+          try {
+            new Notification("🔔 Prepare-se para descer!", {
+              body: `Seu ônibus ${routeId} (#${vehicleId}) está chegando em ${destStop.name}.`,
+              silent: true,
+            });
+          } catch {}
+        }
+      }
+
+      stopsLeftEl.textContent = "🔔 Desça na próxima parada!";
+      if (stopsRemaining === 0 || etaDestSec <= 25) {
+        destClockEl.textContent = "Agora";
+        destCountdownEl.textContent = "(no ponto)";
+      } else {
+        destClockEl.textContent = `~${formatArrivalClockTime(etaDestSec)}`;
+        destCountdownEl.textContent = `(${formatEtaSeconds(etaDestSec)})`;
+      }
     } else {
       stopsLeftEl.textContent = `Faltam ${stopsRemaining} ${stopsRemaining === 1 ? "parada" : "paradas"}`;
       destClockEl.textContent = `~${formatArrivalClockTime(etaDestSec)}`;
@@ -775,7 +815,7 @@ function updateActiveRideBanner() {
     }
   } else if (directDestPred) {
     const etaDestSec = Math.max(0, Math.round((directDestPred.eta_sec - elapsedSec) * speedScale));
-    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}`;
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}${staleTag}`;
     nextStopNameEl.textContent = `Rumo a ${destStop.name}`;
     nextStopEtaEl.textContent = formatEtaSeconds(etaDestSec);
     progressFillEl.style.width = "65%";
@@ -783,7 +823,7 @@ function updateActiveRideBanner() {
     destClockEl.textContent = `~${formatArrivalClockTime(etaDestSec)}`;
     destCountdownEl.textContent = `(${formatEtaSeconds(etaDestSec)})`;
   } else {
-    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}`;
+    titleEl.textContent = `🚌 No Ônibus ${routeId} • #${vehicleId}${staleTag}`;
     nextStopNameEl.textContent = "Sincronizando posição GPS na via...";
     nextStopEtaEl.textContent = "Aguarde";
   }
@@ -838,9 +878,25 @@ function interpolateAlongShape(shape, cumDist, targetDistM) {
   return { lat: last[0], lon: last[1], bearing: 0 };
 }
 
+function applyAutoDarkMode() {
+  const curHour = new Date().getHours();
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const isNight = curHour < 7 || curHour >= 18;
+  if (prefersDark || isNight) {
+    document.body.classList.add("dark-theme");
+  } else {
+    document.body.classList.remove("dark-theme");
+  }
+}
+
 async function initApp() {
   updateClock();
   setInterval(updateClock, 1000);
+
+  applyAutoDarkMode();
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAutoDarkMode);
+  }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -1142,6 +1198,7 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey, rtDir) {
   // 1) Ônibus já na via entre o embarque e a descida (ex: você acabou de entrar no #3275)
   inTransitVehicles.slice(0, 2).forEach((v) => {
     const isLive = v.is_realtime;
+    const isStale = isLive && (Date.now() - (v.last_sync_ms || lastRealtimeSyncMs) >= 120000);
     const isBoardedThis =
       boardedRide &&
       boardedRide.routeId === stepCfg.routeId &&
@@ -1152,12 +1209,15 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey, rtDir) {
     const arrivalAtDestClock = formatArrivalClockTime(etaDestSec);
     const busKey = `${dirKey}_${v.vehicle_id}`;
 
+    let statusText = isBoardedThis ? "✅ Você está neste ônibus" : "Na via rumo à descida";
+    if (isStale) statusText = isBoardedThis ? "✅ Embarcado (⚠️ GPS pausado +2m)" : "⚠️ GPS pausado (+2 min) • Estimado";
+
     rowsHtml.push(`
-      <div class="eta-row-card ${isLive ? "is-live" : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
+      <div class="eta-row-card ${isLive ? (isStale ? "is-stale" : "is-live") : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
         <div class="eta-bus-left">
-          <span class="eta-bus-badge ${isLive ? "live" : ""}">#${v.vehicle_id}</span>
+          <span class="eta-bus-badge ${isLive ? (isStale ? "" : "live") : ""}">#${v.vehicle_id}</span>
           <div class="eta-bus-desc">
-            <span class="eta-bus-status">${isBoardedThis ? "✅ Você está neste ônibus" : "Na via rumo à descida"}</span>
+            <span class="eta-bus-status">${statusText}</span>
             <span class="eta-bus-sub">Próx: <strong>${v.next_stop_name}</strong> &rarr; Desce às <strong>~${arrivalAtDestClock}</strong> (${formatEtaSeconds(etaDestSec)})</span>
           </div>
         </div>
@@ -1180,6 +1240,7 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey, rtDir) {
   // 2) Próximos ônibus chegando no ponto de embarque
   (preds || []).slice(0, 3).forEach((p) => {
     const isLive = p.is_realtime;
+    const isStale = isLive && (Date.now() - (p.last_sync_ms || lastRealtimeSyncMs) >= 120000);
     const isBoardedThis =
       boardedRide &&
       boardedRide.routeId === stepCfg.routeId &&
@@ -1191,19 +1252,22 @@ function renderStepLiveEtas(containerId, preds, stepCfg, dirKey, rtDir) {
     const arrivalAtDestClock = formatArrivalClockTime(etaDestSec);
     const busKey = `${dirKey}_${p.vehicle_id}`;
 
+    let statusText = isBoardedThis ? "✅ Você está neste ônibus" : isLive ? "GPS Ao Vivo • Calculado" : "Programado • Estimado";
+    if (isStale) statusText = isBoardedThis ? "✅ Embarcado (⚠️ GPS pausado +2m)" : "⚠️ GPS pausado (+2 min) • Estimado";
+
     rowsHtml.push(`
-      <div class="eta-row-card ${isLive ? "is-live" : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
+      <div class="eta-row-card ${isLive ? (isStale ? "is-stale" : "is-live") : ""} ${isBoardedThis ? "is-boarded" : ""}" data-bus-key="${busKey}">
         <div class="eta-bus-left">
-          <span class="eta-bus-badge ${isLive ? "live" : ""}">#${p.vehicle_id}</span>
+          <span class="eta-bus-badge ${isLive ? (isStale ? "" : "live") : ""}">#${p.vehicle_id}</span>
           <div class="eta-bus-desc">
-            <span class="eta-bus-status">${isBoardedThis ? "✅ Você está neste ônibus" : isLive ? "GPS Ao Vivo • Calculado" : "Programado • Estimado"}</span>
+            <span class="eta-bus-status">${statusText}</span>
             <span class="eta-bus-sub">Passa às <strong>${arrivalAtBoardClock}</strong> &rarr; Desce às <strong>~${arrivalAtDestClock}</strong></span>
           </div>
         </div>
         <div class="eta-right-stack">
           <div class="eta-time-right">
             <span class="eta-countdown">${formatEtaSeconds(p.eta_sec)}</span>
-            <span class="eta-clock-arrival">${isLive ? "GPS Real" : "Estimado"}</span>
+            <span class="eta-clock-arrival">${isStale ? "Projetado" : (isLive ? "GPS Real" : "Estimado")}</span>
           </div>
           <button
             type="button"
