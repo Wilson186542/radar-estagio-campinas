@@ -1,10 +1,10 @@
-const CACHE_NAME = "radar-estagio-v4";
+const CACHE_NAME = "radar-estagio-v5";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/css/style.css?v=4",
-  "./src/js/app.js?v=4",
+  "./src/css/style.css?v=5",
+  "./src/js/app.js?v=5",
   "./data/transit_data.json"
 ];
 
@@ -26,11 +26,19 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  // Nunca fazer cache das chamadas em tempo real da API do Cittamobi
   if (url.hostname.includes("cittamobi.com.br") || url.pathname.includes("/api/realtime")) {
     return;
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((networkResp) => {
+        if (networkResp && networkResp.status === 200 && event.request.method === "GET") {
+          const clone = networkResp.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResp;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
+
