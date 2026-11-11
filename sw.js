@@ -1,10 +1,10 @@
-const CACHE_NAME = "radar-estagio-v7";
+const CACHE_NAME = "radar-estagio-v8";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/css/style.css?v=7",
-  "./src/js/app.js?v=7",
+  "./src/css/style.css?v=8",
+  "./src/js/app.js?v=8",
   "./data/transit_data.json"
 ];
 
